@@ -1,4 +1,11 @@
-MIT License
+
+### **4. 🛠️ COMANDOS GIT PARA SUBIR O CÓDIGO**
+
+```bash
+# No terminal, na pasta do projeto:
+git add .
+git commit -m "🎉 Initial commit: SPYNET Security base structure"
+git push origin mainMIT License
 
 Copyright (c) 2025 SALVECI DOS SANYOS 
 
