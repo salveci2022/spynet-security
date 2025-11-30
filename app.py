@@ -1,274 +1,225 @@
-from flask import Flask, send_file, render_template_string
+from flask import Flask, render_template, send_file, jsonify, request
 import os
+import datetime
+import logging
 
 app = Flask(__name__)
 
-# Rota principal
-@app.route('/')
-def index():
-    return '''
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>SPYNET Security</title>
-        <style>
-            body { 
-                font-family: Arial, sans-serif; 
-                text-align: center; 
-                margin: 50px;
-                background: #1a1a1a;
-                color: white;
-            }
-            .container {
-                max-width: 600px;
-                margin: 0 auto;
-                padding: 20px;
-            }
-            .btn {
-                display: block;
-                width: 200px;
-                margin: 20px auto;
-                padding: 15px;
-                font-size: 18px;
-                text-decoration: none;
-                color: white;
-                background: #007bff;
-                border-radius: 8px;
-                transition: background 0.3s;
-            }
-            .btn:hover {
-                background: #0056b3;
-            }
-            .alarme-btn {
-                background: #dc3545;
-            }
-            .alarme-btn:hover {
-                background: #c82333;
-            }
-            h1 {
-                color: #00ff00;
-                margin-bottom: 30px;
-            }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h1>🛡️ SPYNET Security System</h1>
-            <p>Sistema de monitoramento e segurança</p>
-            
-            <a href="/alarme" class="btn alarme-btn">🚨 Painel de Alarme</a>
-            <a href="/play-alarm" class="btn">🔊 Tocar Alarme Direto</a>
-            <a href="/status" class="btn">📊 Status do Sistema</a>
-        </div>
-    </body>
-    </html>
-    '''
+# Configuração para Render
+app.config['JSONIFY_PRETTYPRINT_REGULAR'] = False
 
-# Rota para tocar o áudio diretamente
+# Configurar logging
+logging.basicConfig(level=logging.INFO)
+
+# Armazenamento em memória (Render reinicia periodicamente)
+alertas = []
+sistema_status = {
+    'sirene_ativa': False,
+    'mutado': False,
+    'ultima_atualizacao': None
+}
+
+# ========== ROTAS PRINCIPAIS ==========
+@app.route('/')
+def home():
+    return render_template('home.html')
+
+@app.route('/professor')
+def professor():
+    return render_template('professor.html')
+
+@app.route('/central')
+def central():
+    return render_template('central.html', alertas=alertas)
+
+@app.route('/painel_publico')
+def painel_publico():
+    return render_template('painel_publico.html', alertas=alertas)
+
+@app.route('/admin')
+def admin():
+    return render_template('admin.html')
+
+@app.route('/login_central')
+def login_central():
+    return render_template('login_central.html')
+
+# ========== SISTEMA DE ÁUDIO ==========
 @app.route('/play-alarm')
 def play_alarm():
     try:
-        return send_file('static/siren.mp3')
+        return send_file('static/siren.wav')
     except FileNotFoundError:
         return "Arquivo de áudio não encontrado", 404
 
-# Rota para página com botão de alarme
+@app.route('/tocar_sirene')
+def tocar_sirene():
+    try:
+        return send_file('static/siren.wav')
+    except Exception as e:
+        app.logger.error(f"Erro na sirene: {str(e)}")
+        return f"Erro ao carregar sirene: {str(e)}", 500
+
+# ========== APIs DO SISTEMA ==========
+@app.route('/api/alert', methods=['POST'])
+def receber_alerta():
+    try:
+        data = request.get_json()
+        
+        novo_alerta = {
+            'id': len(alertas) + 1,
+            'teacher': data.get('teacher', 'Professor'),
+            'room': data.get('room', 'Sala não informada'),
+            'description': data.get('description', 'Sem descrição'),
+            'timestamp': datetime.datetime.now().strftime('%d/%m/%Y %H:%M:%S'),
+            'resolved': False,
+            'ts': datetime.datetime.now().strftime('%H:%M:%S')
+        }
+        
+        alertas.append(novo_alerta)
+        sistema_status['sirene_ativa'] = True
+        sistema_status['ultima_atualizacao'] = datetime.datetime.now().isoformat()
+        
+        # Log do alerta
+        app.logger.info(f"Novo alerta: {novo_alerta}")
+        
+        # Manter apenas os últimos 20 alertas (otimização)
+        if len(alertas) > 20:
+            alertas.pop(0)
+            
+        return jsonify({'ok': True, 'message': 'Alerta recebido com sucesso'})
+        
+    except Exception as e:
+        app.logger.error(f"Erro no alerta: {str(e)}")
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+@app.route('/api/status')
+def status_sistema():
+    try:
+        alertas_ativos = [a for a in alertas if not a['resolved']]
+        
+        return jsonify({
+            'ok': True,
+            'siren': sistema_status['sirene_ativa'],
+            'muted': sistema_status['mutado'],
+            'alerts': alertas,
+            'active_alerts': len(alertas_ativos),
+            'last_update': sistema_status['ultima_atualizacao']
+        })
+    except Exception as e:
+        app.logger.error(f"Erro no status: {str(e)}")
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+@app.route('/api/siren', methods=['POST'])
+def controlar_sirene():
+    try:
+        data = request.get_json()
+        action = data.get('action')
+        
+        if action == 'on':
+            sistema_status['sirene_ativa'] = True
+            sistema_status['mutado'] = False
+        elif action == 'off':
+            sistema_status['sirene_ativa'] = False
+            sistema_status['mutado'] = False
+        elif action == 'mute':
+            sistema_status['mutado'] = True
+            
+        sistema_status['ultima_atualizacao'] = datetime.datetime.now().isoformat()
+        
+        app.logger.info(f"Sirene: {action} - Status: {sistema_status['sirene_ativa']}")
+        
+        return jsonify({'ok': True, 'siren': sistema_status['sirene_ativa'], 'muted': sistema_status['mutado']})
+        
+    except Exception as e:
+        app.logger.error(f"Erro na sirene: {str(e)}")
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+@app.route('/api/resolve', methods=['POST'])
+def resolver_alerta():
+    try:
+        # Encontrar o primeiro alerta não resolvido
+        for alerta in alertas:
+            if not alerta['resolved']:
+                alerta['resolved'] = True
+                break
+                
+        # Se não há mais alertas ativos, desativar sirene
+        alertas_ativos = [a for a in alertas if not a['resolved']]
+        if not alertas_ativos:
+            sistema_status['sirene_ativa'] = False
+            
+        sistema_status['ultima_atualizacao'] = datetime.datetime.now().isoformat()
+        
+        app.logger.info("Alerta resolvido")
+        
+        return jsonify({'ok': True})
+        
+    except Exception as e:
+        app.logger.error(f"Erro ao resolver: {str(e)}")
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+@app.route('/api/clear', methods=['POST'])
+def limpar_alertas():
+    try:
+        alertas.clear()
+        sistema_status['sirene_ativa'] = False
+        sistema_status['ultima_atualizacao'] = datetime.datetime.now().isoformat()
+        
+        app.logger.info("Alertas limpos")
+        
+        return jsonify({'ok': True})
+        
+    except Exception as e:
+        app.logger.error(f"Erro ao limpar: {str(e)}")
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+@app.route('/acionar_alerta', methods=['POST'])
+def acionar_alerta():
+    try:
+        novo_alerta = {
+            'id': len(alertas) + 1,
+            'teacher': 'Professor',
+            'room': 'Local não informado',
+            'description': 'Alerta de pânico acionado',
+            'timestamp': datetime.datetime.now().strftime('%d/%m/%Y %H:%M:%S'),
+            'resolved': False,
+            'ts': datetime.datetime.now().strftime('%H:%M:%S')
+        }
+        
+        alertas.append(novo_alerta)
+        sistema_status['sirene_ativa'] = True
+        sistema_status['ultima_atualizacao'] = datetime.datetime.now().isoformat()
+        
+        app.logger.info("Alerta de pânico acionado")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Alerta de pânico acionado! Sirene ativada.',
+            'alerta': novo_alerta
+        })
+        
+    except Exception as e:
+        app.logger.error(f"Erro no pânico: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Erro: {str(e)}'
+        }), 500
+
+# Health check para Render
+@app.route('/health')
+def health_check():
+    return jsonify({
+        'status': 'healthy',
+        'timestamp': datetime.datetime.now().isoformat(),
+        'alertas_ativos': len([a for a in alertas if not a['resolved']])
+    })
+
+# Rota de fallback
 @app.route('/alarme')
 def alarme_page():
-    return render_template_string('''
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Painel de Alarme - SPYNET</title>
-        <style>
-            body { 
-                font-family: Arial, sans-serif; 
-                text-align: center; 
-                margin: 0;
-                padding: 0;
-                background: linear-gradient(135deg, #1a1a1a, #2d2d2d);
-                color: white;
-                min-height: 100vh;
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                justify-content: center;
-            }
-            .container {
-                background: rgba(0, 0, 0, 0.7);
-                padding: 40px;
-                border-radius: 15px;
-                box-shadow: 0 0 30px rgba(255, 0, 0, 0.3);
-                border: 2px solid #ff4444;
-            }
-            .alarme-btn {
-                padding: 25px 50px;
-                font-size: 28px;
-                font-weight: bold;
-                background: #ff4444;
-                color: white;
-                border: none;
-                border-radius: 15px;
-                cursor: pointer;
-                margin: 20px;
-                transition: all 0.3s;
-                box-shadow: 0 0 20px rgba(255, 0, 0, 0.5);
-            }
-            .alarme-btn:hover {
-                background: #cc0000;
-                transform: scale(1.05);
-                box-shadow: 0 0 30px rgba(255, 0, 0, 0.7);
-            }
-            .stop-btn {
-                background: #4444ff;
-                box-shadow: 0 0 20px rgba(0, 0, 255, 0.5);
-            }
-            .stop-btn:hover {
-                background: #0000cc;
-                box-shadow: 0 0 30px rgba(0, 0, 255, 0.7);
-            }
-            .back-btn {
-                padding: 10px 20px;
-                background: #666;
-                color: white;
-                text-decoration: none;
-                border-radius: 5px;
-                margin-top: 20px;
-                display: inline-block;
-            }
-            h1 {
-                color: #ff4444;
-                font-size: 36px;
-                margin-bottom: 30px;
-                text-shadow: 0 0 10px rgba(255, 0, 0, 0.5);
-            }
-            .status {
-                margin: 20px 0;
-                padding: 10px;
-                background: rgba(255, 255, 255, 0.1);
-                border-radius: 8px;
-            }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h1>🚨 PAINEL DE ALARME</h1>
-            
-            <div class="status">
-                <p>🔴 Sistema de Alarme - PRONTO</p>
-                <p>📡 Status: <span style="color: #00ff00;">ATIVO</span></p>
-            </div>
-
-            <button class="alarme-btn" onclick="tocarAlarme()">
-                🔊 ATIVAR ALARME
-            </button>
-            
-            <button class="alarme-btn stop-btn" onclick="pararAlarme()">
-                ⏹️ PARAR ALARME
-            </button>
-            
-            <audio id="alarmeAudio" loop>
-                <source src="/play-alarm" type="audio/mp3">
-                Seu navegador não suporta o elemento de áudio.
-            </audio>
-
-            <div style="margin-top: 30px;">
-                <a href="/" class="back-btn">← Voltar ao Início</a>
-            </div>
-        </div>
-
-        <script>
-            function tocarAlarme() {
-                var audio = document.getElementById('alarmeAudio');
-                audio.play().then(() => {
-                    console.log('Alarme ativado!');
-                }).catch(error => {
-                    console.log('Erro ao tocar alarme:', error);
-                    alert('Clique em "Tocar Alarme Direto" primeiro para permitir o áudio!');
-                });
-            }
-            
-            function pararAlarme() {
-                var audio = document.getElementById('alarmeAudio');
-                audio.pause();
-                audio.currentTime = 0;
-            }
-            
-            // Permitir áudio no clique em qualquer lugar da página
-            document.addEventListener('click', function() {
-                var audio = document.getElementById('alarmeAudio');
-                audio.volume = 0.1; // Volume reduzido para teste
-            });
-        </script>
-    </body>
-    </html>
-    ''')
-
-# Rota de status do sistema
-@app.route('/status')
-def status():
-    return '''
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Status do Sistema - SPYNET</title>
-        <style>
-            body { 
-                font-family: Arial, sans-serif; 
-                text-align: center; 
-                margin: 50px;
-                background: #1a1a1a;
-                color: white;
-            }
-            .status-item {
-                background: rgba(255, 255, 255, 0.1);
-                padding: 15px;
-                margin: 10px;
-                border-radius: 8px;
-                display: inline-block;
-                min-width: 200px;
-            }
-            .online { color: #00ff00; }
-            .offline { color: #ff4444; }
-            .back-btn {
-                padding: 10px 20px;
-                background: #666;
-                color: white;
-                text-decoration: none;
-                border-radius: 5px;
-                margin-top: 20px;
-                display: inline-block;
-            }
-        </style>
-    </head>
-    <body>
-        <h1>📊 Status do Sistema</h1>
-        
-        <div class="status-item">
-            <h3>Servidor Web</h3>
-            <p class="online">● ONLINE</p>
-        </div>
-        
-        <div class="status-item">
-            <h3>Sistema de Áudio</h3>
-            <p class="online">● OPERACIONAL</p>
-        </div>
-        
-        <div class="status-item">
-            <h3>Banco de Dados</h3>
-            <p class="online">● CONECTADO</p>
-        </div>
-        
-        <div class="status-item">
-            <h3>Segurança</h3>
-            <p class="online">● ATIVA</p>
-        </div>
-        
-        <br>
-        <a href="/" class="back-btn">← Voltar ao Início</a>
-    </body>
-    </html>
-    '''
+    return render_template('home.html')
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
