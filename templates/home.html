@@ -276,6 +276,8 @@
             transition: all 0.3s ease;
             position: relative;
             overflow: hidden;
+            margin-bottom: 10px;
+            width: 100%;
         }
 
         .btn-premium::before {
@@ -298,6 +300,14 @@
             box-shadow: 
                 0 15px 35px rgba(0, 102, 255, 0.6),
                 0 0 30px rgba(123, 66, 246, 0.5);
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, var(--deep-purple), #a855f7);
+        }
+
+        .btn-alert {
+            background: linear-gradient(135deg, #ff4757, var(--electric-orange));
         }
 
         .features-premium {
@@ -424,6 +434,9 @@
             .spynet-premium {
                 font-size: 2.8rem;
             }
+            .btn-premium {
+                width: 100%;
+            }
         }
     </style>
 </head>
@@ -459,15 +472,23 @@
                     <div class="tag-premium">🔒 Seguro</div>
                 </div>
 
-                <button class="btn-premium" onclick="irProfessor()">
+                <!-- BOTÃO PRINCIPAL - APP DO PROFESSOR -->
+                <button class="btn-premium btn-alert" onclick="irProfessor()">
                     <span class="icon">🚨</span>
-                    Acessar App do Professor
+                    ACIONAR BOTÃO DE PÂNICO
+                </button>
+
+                <!-- NOVO BOTÃO - PAINEL PÚBLICO -->
+                <button class="btn-premium btn-secondary" onclick="irPainelPublico()">
+                    <span class="icon">👁️</span>
+                    VER PAINEL PÚBLICO
                 </button>
 
                 <ul class="features-premium">
                     <li>Envio imediato de alertas para a central</li>
                     <li>Registro completo de data, hora e localização</li>
                     <li>Compatível com todos os dispositivos móveis</li>
+                    <li>Acompanhamento em tempo real dos alertas</li>
                 </ul>
 
                 <div class="timeline-premium">
@@ -489,7 +510,7 @@
                         <span class="pill-small"><span class="icon">🚨</span> Alertas</span>
                         <span class="pill-small"><span class="icon">⚙️</span> Controles</span>
                     </div>
-                    <button class="btn-premium" style="width:100%; padding:10px; font-size:13px; margin-top:10px;" onclick="irCentral()">
+                    <button class="btn-premium" style="padding:10px; font-size:13px; margin-top:10px;" onclick="irCentral()">
                         <span class="icon">🛡️</span>
                         Acessar Painel Central
                     </button>
@@ -502,7 +523,21 @@
                         <li>Histórico completo de incidentes</li>
                         <li>Interface responsiva e intuitiva</li>
                         <li>Suporte 24/7</li>
+                        <li>Painel público para acompanhamento</li>
                     </ul>
+                </div>
+
+                <div class="block-premium">
+                    <div class="block-title-premium">📊 Painel Público</div>
+                    <p style="margin:4px 0 8px; font-size:12px; color:#94a3b8; line-height:1.5;">
+                        Acompanhe em tempo real todos os alertas e situações da escola sem necessidade de login.
+                    </p>
+                    <div class="pills-container">
+                        <span class="pill-small"><span class="icon">📈</span> Estatísticas</span>
+                        <span class="pill-small"><span class="icon">🔄</span> Tempo Real</span>
+                        <span class="pill-small"><span class="icon">👥</span> Acesso Livre</span>
+                        <span class="pill-small"><span class="icon">📱</span> Responsivo</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -516,8 +551,14 @@
     function irProfessor(){
         window.location.href = "/professor";
     }
+
     function irCentral(){
         window.location.href = "/login_central";
+    }
+
+    // NOVA FUNÇÃO PARA O PAINEL PÚBLICO
+    function irPainelPublico(){
+        window.location.href = "/painel_publico";
     }
 
     function updateClockHome(){
