@@ -11,7 +11,7 @@ app.config['JSONIFY_PRETTYPRINT_REGULAR'] = False
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
 
-# Armazenamento em memória (Render reinicia periodicamente)
+# Armazenamento em memória
 alertas = []
 sistema_status = {
     'sirene_ativa': False,
@@ -80,10 +80,9 @@ def receber_alerta():
         sistema_status['sirene_ativa'] = True
         sistema_status['ultima_atualizacao'] = datetime.datetime.now().isoformat()
         
-        # Log do alerta
         app.logger.info(f"Novo alerta: {novo_alerta}")
         
-        # Manter apenas os últimos 20 alertas (otimização)
+        # Manter apenas os últimos 20 alertas
         if len(alertas) > 20:
             alertas.pop(0)
             
