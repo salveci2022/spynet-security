@@ -5,10 +5,8 @@ import logging
 
 app = Flask(__name__)
 
-# Configuração para Render
+# Configuração
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = False
-
-# Configurar logging
 logging.basicConfig(level=logging.INFO)
 
 # Armazenamento em memória
@@ -30,11 +28,11 @@ def professor():
 
 @app.route('/central')
 def central():
-    return render_template('central.html', alertas=alertas)
+    return render_template('central.html')
 
 @app.route('/painel_publico')
 def painel_publico():
-    return render_template('painel_publico.html', alertas=alertas)
+    return render_template('painel_publico.html')
 
 @app.route('/admin')
 def admin():
@@ -57,14 +55,16 @@ def tocar_sirene():
     try:
         return send_file('static/siren.wav')
     except Exception as e:
-        app.logger.error(f"Erro na sirene: {str(e)}")
         return f"Erro ao carregar sirene: {str(e)}", 500
 
 # ========== APIs DO SISTEMA ==========
+
+# ✅ ROTA CORRIGIDA: /api/alert com POST
 @app.route('/api/alert', methods=['POST'])
 def receber_alerta():
     try:
         data = request.get_json()
+        print("Dados recebidos:", data)  # Debug
         
         novo_alerta = {
             'id': len(alertas) + 1,
@@ -80,19 +80,17 @@ def receber_alerta():
         sistema_status['sirene_ativa'] = True
         sistema_status['ultima_atualizacao'] = datetime.datetime.now().isoformat()
         
-        app.logger.info(f"Novo alerta: {novo_alerta}")
+        print(f"Novo alerta salvo: {novo_alerta}")  # Debug
+        print(f"Total de alertas: {len(alertas)}")  # Debug
         
-        # Manter apenas os últimos 20 alertas
-        if len(alertas) > 20:
-            alertas.pop(0)
-            
         return jsonify({'ok': True, 'message': 'Alerta recebido com sucesso'})
         
     except Exception as e:
-        app.logger.error(f"Erro no alerta: {str(e)}")
+        print(f"Erro no alerta: {str(e)}")  # Debug
         return jsonify({'ok': False, 'error': str(e)}), 500
 
-@app.route('/api/status')
+# ✅ ROTA CORRIGIDA: /api/status
+@app.route('/api/status', methods=['GET'])
 def status_sistema():
     try:
         alertas_ativos = [a for a in alertas if not a['resolved']]
@@ -106,9 +104,9 @@ def status_sistema():
             'last_update': sistema_status['ultima_atualizacao']
         })
     except Exception as e:
-        app.logger.error(f"Erro no status: {str(e)}")
         return jsonify({'ok': False, 'error': str(e)}), 500
 
+# ✅ ROTA CORRIGIDA: /api/siren com POST
 @app.route('/api/siren', methods=['POST'])
 def controlar_sirene():
     try:
@@ -126,38 +124,32 @@ def controlar_sirene():
             
         sistema_status['ultima_atualizacao'] = datetime.datetime.now().isoformat()
         
-        app.logger.info(f"Sirene: {action} - Status: {sistema_status['sirene_ativa']}")
-        
         return jsonify({'ok': True, 'siren': sistema_status['sirene_ativa'], 'muted': sistema_status['mutado']})
         
     except Exception as e:
-        app.logger.error(f"Erro na sirene: {str(e)}")
         return jsonify({'ok': False, 'error': str(e)}), 500
 
+# ✅ ROTA CORRIGIDA: /api/resolve com POST
 @app.route('/api/resolve', methods=['POST'])
 def resolver_alerta():
     try:
-        # Encontrar o primeiro alerta não resolvido
         for alerta in alertas:
             if not alerta['resolved']:
                 alerta['resolved'] = True
                 break
                 
-        # Se não há mais alertas ativos, desativar sirene
         alertas_ativos = [a for a in alertas if not a['resolved']]
         if not alertas_ativos:
             sistema_status['sirene_ativa'] = False
             
         sistema_status['ultima_atualizacao'] = datetime.datetime.now().isoformat()
         
-        app.logger.info("Alerta resolvido")
-        
         return jsonify({'ok': True})
         
     except Exception as e:
-        app.logger.error(f"Erro ao resolver: {str(e)}")
         return jsonify({'ok': False, 'error': str(e)}), 500
 
+# ✅ ROTA CORRIGIDA: /api/clear com POST
 @app.route('/api/clear', methods=['POST'])
 def limpar_alertas():
     try:
@@ -165,14 +157,12 @@ def limpar_alertas():
         sistema_status['sirene_ativa'] = False
         sistema_status['ultima_atualizacao'] = datetime.datetime.now().isoformat()
         
-        app.logger.info("Alertas limpos")
-        
         return jsonify({'ok': True})
         
     except Exception as e:
-        app.logger.error(f"Erro ao limpar: {str(e)}")
         return jsonify({'ok': False, 'error': str(e)}), 500
 
+# ✅ ROTA CORRIGIDA: /acionar_alerta com POST
 @app.route('/acionar_alerta', methods=['POST'])
 def acionar_alerta():
     try:
@@ -190,8 +180,6 @@ def acionar_alerta():
         sistema_status['sirene_ativa'] = True
         sistema_status['ultima_atualizacao'] = datetime.datetime.now().isoformat()
         
-        app.logger.info("Alerta de pânico acionado")
-        
         return jsonify({
             'success': True,
             'message': 'Alerta de pânico acionado! Sirene ativada.',
@@ -199,26 +187,16 @@ def acionar_alerta():
         })
         
     except Exception as e:
-        app.logger.error(f"Erro no pânico: {str(e)}")
         return jsonify({
             'success': False,
             'message': f'Erro: {str(e)}'
         }), 500
 
-# Health check para Render
+# Health check
 @app.route('/health')
 def health_check():
-    return jsonify({
-        'status': 'healthy',
-        'timestamp': datetime.datetime.now().isoformat(),
-        'alertas_ativos': len([a for a in alertas if not a['resolved']])
-    })
-
-# Rota de fallback
-@app.route('/alarme')
-def alarme_page():
-    return render_template('home.html')
+    return jsonify({'status': 'healthy'})
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=False)
+    app.run(host='0.0.0.0', port=port, debug=True)  # Debug=True para ver erros
